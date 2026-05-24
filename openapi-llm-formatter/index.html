@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>OpenAPI LLM Formatter</title>
+	<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+	<script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+</head>
+
+<body class="h-full bg-slate-950 text-slate-100">
+	<div class="min-h-full flex flex-col">
+		<header class="border-b border-slate-800 bg-slate-950/80 backdrop-blur z-10">
+			<div class="max-w-6xl mx-auto px-4 py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+				<div>
+					<h1 class="text-xl font-semibold tracking-tight text-slate-50">OpenAPI → LLM Formatter</h1>
+					<p class="text-sm text-slate-400">Upload an OpenAPI YAML/JSON file and get a concise, model-ready description.</p>
+				</div>
+				<div class="flex items-center gap-3 text-xs text-slate-400">
+					<span class="px-2 py-1 rounded-full border border-slate-700/70 bg-slate-900/60">Dark theme</span>
+					<span class="px-2 py-1 rounded-full border border-emerald-700/70 bg-emerald-900/40 text-emerald-200">Local only · No upload</span>
+				</div>
+			</div>
+		</header>
+
+		<main class="flex-1">
+			<div class="max-w-6xl mx-auto px-4 py-6 flex flex-col gap-6 lg:flex-row">
+				<!-- Left: uploader and raw preview -->
+				<section class="w-full lg:w-5/12 flex flex-col gap-4">
+					<div class="rounded-xl border border-slate-800 bg-slate-900/70 shadow-lg shadow-slate-950/40 overflow-hidden">
+						<div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-900/80">
+							<div class="flex items-center gap-2">
+								<span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+								<h2 class="text-sm font-medium text-slate-100">1. Upload OpenAPI spec</h2>
+							</div>
+							<span id="fileStatus" class="text-[11px] text-slate-400">No file selected</span>
+						</div>
+						<div class="p-4 flex flex-col gap-3 text-sm">
+							<label for="fileInput" class="flex flex-col items-center justify-center gap-2 px-4 py-6 border-2 border-dashed border-slate-700/80 rounded-lg cursor-pointer hover:border-emerald-500/80 hover:bg-slate-900 transition">
+								<div class="flex items-center gap-2 text-slate-300">
+									<span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-800/80 border border-slate-700/80 text-emerald-300">⇪</span>
+									<div class="text-left">
+										<p class="text-sm font-medium">Drop your file here or click to browse</p>
+										<p class="text-xs text-slate-400 mt-0.5">Supports .yaml, .yml, .json OpenAPI 3.x / 2.0</p>
+									</div>
+								</div>
+								<input id="fileInput" type="file" class="hidden" accept=".yaml,.yml,.json,.txt,application/json,text/yaml,text/x-yaml" />
+							</label>
+
+							<div class="grid grid-cols-2 gap-2 text-[11px] text-slate-400">
+								<div class="space-y-1">
+									<p class="font-medium text-slate-300">Quick tips</p>
+									<ul class="list-disc list-inside space-y-0.5">
+										<li>Server-side parsing is not used.</li>
+										<li>Large specs may take a moment.</li>
+									</ul>
+								</div>
+								<div class="space-y-1">
+									<p class="font-medium text-slate-300">Output style</p>
+									<ul class="list-disc list-inside space-y-0.5">
+										<li>LLM-friendly text format</li>
+										<li>Stable, copy-paste ready</li>
+									</ul>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<div class="rounded-xl border border-slate-800 bg-slate-900/70 shadow-lg shadow-slate-950/40 overflow-hidden flex-1 flex flex-col min-h-[220px]">
+						<div class="px-4 py-2 border-b border-slate-800 flex items-center justify-between bg-slate-900/80 text-xs">
+							<div class="flex items-center gap-2">
+								<span class="h-1.5 w-1.5 rounded-full bg-sky-400"></span>
+								<span class="font-semibold text-slate-100">Parsed summary</span>
+							</div>
+							<span id="summaryStatus" class="text-slate-400">Waiting for file…</span>
+						</div>
+						<div class="flex-1 overflow-auto text-xs">
+							<pre id="parsedSummary" class="p-3 font-mono text-slate-300 whitespace-pre-wrap"></pre>
+						</div>
+					</div>
+				</section>
+
+				<!-- Right: LLM friendly output -->
+				<section class="w-full lg:w-7/12 flex flex-col gap-4">
+					<div class="rounded-xl border border-slate-800 bg-slate-900/70 shadow-lg shadow-slate-950/40 overflow-hidden flex-1 flex flex-col min-h-[360px]">
+						<div class="px-4 py-2 border-b border-slate-800 flex items-center justify-between bg-slate-900/80 text-xs">
+							<div class="flex items-center gap-2">
+								<span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+								<span class="font-semibold text-slate-100">2. LLM friendly description</span>
+							</div>
+							<div class="flex items-center gap-2">
+								<button id="copyButton" class="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-slate-700 bg-slate-900 text-[11px] text-slate-200 hover:border-emerald-500 hover:text-emerald-100 hover:bg-slate-900/80 disabled:opacity-40 disabled:cursor-not-allowed" disabled>
+									<span>Copy</span>
+								</button>
+								<span id="tokenEstimate" class="text-[11px] text-slate-400"></span>
+							</div>
+						</div>
+						<div class="flex-1 overflow-auto">
+							<pre id="llmOutput" class="p-4 font-mono text-[11px] leading-relaxed text-slate-100 whitespace-pre-wrap"></pre>
+						</div>
+					</div>
+
+					<div class="rounded-xl border border-slate-800 bg-slate-950/80 px-4 py-3 text-[11px] text-slate-400 flex flex-col gap-2">
+						<div class="flex flex-wrap gap-3 items-center">
+							<span class="font-semibold text-slate-200">Usage hint for LLMs</span>
+							<code class="px-2 py-1 rounded bg-slate-900 border border-slate-700 text-[10px] text-slate-200">"You are provided with an OpenAPI description in structured text. Use it as ground truth for endpoints, parameters, and schemas."</code>
+						</div>
+						<p>You can prepend that instruction to your prompts and then paste the generated description. The format is designed to be deterministic, easy to diff, and compact.</p>
+					</div>
+				</section>
+			</div>
+		</main>
+	</div>
+
+	<script>
+		const fileInput = document.getElementById('fileInput');
+		const fileStatus = document.getElementById('fileStatus');
+		const summaryStatus = document.getElementById('summaryStatus');
+		const parsedSummaryEl = document.getElementById('parsedSummary');
+		const llmOutputEl = document.getElementById('llmOutput');
+		const copyButton = document.getElementById('copyButton');
+		const tokenEstimate = document.getElementById('tokenEstimate');
+
+		function resetUI() {
+			parsedSummaryEl.textContent = '';
+			llmOutputEl.textContent = '';
+			summaryStatus.textContent = 'Waiting for file…';
+			fileStatus.textContent = 'No file selected';
+			copyButton.disabled = true;
+			tokenEstimate.textContent = '';
+		}
+
+		function estimateTokens(text) {
+			if (!text) return 0;
+			const words = text.trim().split(/\s+/).length;
+			return Math.round(words * 0.75); // rough heuristic
+		}
+
+		function humanTokenEstimate(text) {
+			const t = estimateTokens(text);
+			if (!t) return '';
+			return `~${t.toLocaleString()} tokens (rough estimate)`;
+		}
+
+		function shortSummary(spec) {
+			const basic = [];
+			if (spec.openapi) basic.push(`OpenAPI version: ${spec.openapi}`);
+			else if (spec.swagger) basic.push(`Swagger version: ${spec.swagger}`);
+			if (spec.info) {
+				if (spec.info.title) basic.push(`Title: ${spec.info.title}`);
+				if (spec.info.version) basic.push(`Version: ${spec.info.version}`);
+				if (spec.info.description) {
+					const d = String(spec.info.description).replace(/\s+/g, ' ').slice(0, 160);
+					basic.push(`Description: ${d}${spec.info.description.length > 160 ? '…' : ''}`);
+				}
+			}
+			const serverLike = [];
+			if (Array.isArray(spec.servers)) {
+				spec.servers.slice(0, 3).forEach((s, idx) => {
+					if (s && s.url) serverLike.push(`${idx + 1}. ${s.url}`);
+				});
+			} else if (spec.host) {
+				const base = spec.basePath || '';
+				serverLike.push(`1. https://${spec.host}${base}`);
+			}
+			const pathCount = spec.paths ? Object.keys(spec.paths).length : 0;
+			const res = [];
+			if (basic.length) res.push('BASIC', '-----', ...basic);
+			if (serverLike.length) res.push('', 'SERVERS', '-------', ...serverLike);
+			if (pathCount) res.push('', 'PATHS', '-----', `Total paths: ${pathCount}`);
+			return res.join('\n');
+		}
+
+		function buildLLMDescription(spec) {
+			const lines = [];
+			const rootVersion = spec.openapi || spec.swagger || 'unknown';
+			lines.push('OPENAPI_SPEC');
+			lines.push(`version: ${rootVersion}`);
+			lines.push('');
+			if (spec.info) {
+				lines.push('INFO');
+				if (spec.info.title) lines.push(`  title: ${spec.info.title}`);
+				if (spec.info.version) lines.push(`  version: ${spec.info.version}`);
+				if (spec.info.description) {
+					const desc = String(spec.info.description).replace(/\r\n/g, '\n');
+					lines.push('  description: |');
+					desc.split(/\n/).forEach(line => lines.push(`    ${line}`));
+				}
+				lines.push('');
+			}
+			const servers = [];
+			if (Array.isArray(spec.servers)) {
+				spec.servers.forEach(s => {
+					if (!s || !s.url) return;
+					servers.push({
+						url: s.url,
+						description: s.description || ''
+					});
+				});
+			} else if (spec.host) {
+				const scheme = Array.isArray(spec.schemes) && spec.schemes[0] ? spec.schemes[0] : 'https';
+				servers.push({
+					url: `${scheme}://${spec.host}${spec.basePath || ''}`,
+					description: ''
+				});
+			}
+			if (servers.length) {
+				lines.push('SERVERS');
+				servers.forEach((s, idx) => {
+					lines.push(`  - id: server_${idx + 1}`);
+					lines.push(`    url: ${s.url}`);
+					if (s.description) lines.push(`    description: ${s.description}`);
+				});
+				lines.push('');
+			}
+			const COMPONENTS = spec.components || spec.definitions || {};
+			const schemas = COMPONENTS.schemas || COMPONENTS || {};
+			const resolvedSchemas = {};
+
+			function refName(ref) {
+				if (!ref || typeof ref !== 'string') return null;
+				const m = ref.match(/#\/(?:components\/schemas|definitions)\/(.+)$/);
+				return m ? m[1] : ref.split('/').pop();
+			}
+
+			function ensureSchemaLoaded(name, schema) {
+				if (!name || resolvedSchemas[name]) return;
+				resolvedSchemas[name] = schema || {};
+			}
+			const paths = spec.paths || {};
+			const GLOBAL_PARAMS = spec.parameters || {};
+			const usedSchemaNames = new Set();
+
+			function collectSchemaRefs(obj) {
+				if (!obj || typeof obj !== 'object') return;
+				if (Array.isArray(obj)) return obj.forEach(collectSchemaRefs);
+				if (obj.$ref) {
+					const n = refName(obj.$ref);
+					if (n) usedSchemaNames.add(n);
+				}
+				Object.keys(obj).forEach(k => collectSchemaRefs(obj[k]));
+			}
+			Object.values(paths).forEach(pathItem => {
+				if (!pathItem || typeof pathItem !== 'object') return;
+				Object.values(pathItem).forEach(op => {
+					if (!op || typeof op !== 'object') return;
+					collectSchemaRefs(op);
+				});
+			});
+			const PARAMS_CACHE = new Map();
+
+			function normalizeParameters(pathParams = [], opParams = []) {
+				const all = [];
+				const byNameIn = new Map();
+				[...pathParams, ...opParams].forEach(p => {
+					if (!p) return;
+					if (p.$ref) {
+						const ref = p.$ref;
+						if (PARAMS_CACHE.has(ref)) {
+							p = PARAMS_CACHE.get(ref);
+						}
+					}
+					const name = p.name || '';
+					const loc = p.in || 'query';
+					const key = `${loc}:${name}`;
+					if (byNameIn.has(key)) return;
+					byNameIn.set(key, true);
+					all.push(p);
+				});
+				return all;
+			}
+			lines.push('PATHS');
+			const pathKeys = Object.keys(paths).sort();
+			if (!pathKeys.length) {
+				lines.push('  (no paths defined)');
+			}
+			pathKeys.forEach(pathKey => {
+				const pathItem = paths[pathKey] || {};
+				const pathLevelParams = Array.isArray(pathItem.parameters) ? pathItem.parameters : [];
+				const methods = ['get', 'post', 'put', 'patch', 'delete', 'options', 'head', 'trace'];
+				methods.forEach(method => {
+					const op = pathItem[method];
+					if (!op) return;
+					lines.push(`  - operation_id: ${op.operationId || `${method}_${pathKey.replace(/[^a-zA-Z0-9]+/g, '_')}`}`);
+					lines.push(`    method: ${method.toUpperCase()}`);
+					lines.push(`    path: ${pathKey}`);
+					if (op.summary) lines.push(`    summary: ${op.summary}`);
+					if (op.description) {
+						const desc = String(op.description).replace(/\r\n/g, '\n');
+						lines.push('    description: |');
+						desc.split(/\n/).forEach(line => lines.push(`      ${line}`));
+					}
+					if (Array.isArray(op.tags) && op.tags.length) {
+						lines.push('    tags:');
+						op.tags.forEach(t => lines.push(`      - ${t}`));
+					}
+					const opParams = Array.isArray(op.parameters) ? op.parameters : [];
+					const params = normalizeParameters(pathLevelParams, opParams);
+					if (params.length) {
+						lines.push('    parameters:');
+						params.forEach(p => {
+							const location = p.in || 'query';
+							const name = p.name || '';
+							const required = !!p.required;
+							const type = p.schema && p.schema.type ? p.schema.type : p.type || 'object';
+							lines.push('      -');
+							lines.push(`        name: ${name}`);
+							lines.push(`        in: ${location}`);
+							lines.push(`        required: ${required}`);
+							lines.push(`        type: ${type}`);
+							if (p.description) lines.push(`        description: ${p.description.replace(/\s+/g, ' ')}`);
+							const schema = p.schema || null;
+							if (schema && schema.$ref) {
+								const rn = refName(schema.$ref);
+								if (rn) lines.push(`        schema_ref: ${rn}`);
+							} else if (schema) {
+								lines.push('        schema_inline: true');
+							}
+						});
+					}
+					let requestBody = op.requestBody;
+					if (!requestBody && op.consumes && op.parameters) {
+						const bodyParam = op.parameters.find(p => p.in === 'body');
+						if (bodyParam) {
+							requestBody = {
+								description: bodyParam.description,
+								required: bodyParam.required,
+								content: {
+									[op.consumes[0] || 'application/json']: {
+										schema: bodyParam.schema
+									},
+								},
+							};
+						}
+					}
+					if (requestBody) {
+						lines.push('    request_body:');
+						if (requestBody.description) {
+							lines.push(`      description: ${requestBody.description.replace(/\s+/g, ' ')}`);
+						}
+						if (typeof requestBody.required === 'boolean') {
+							lines.push(`      required: ${!!requestBody.required}`);
+						}
+						const content = requestBody.content || {};
+						const mediaTypes = Object.keys(content);
+						if (mediaTypes.length) {
+							lines.push('      content:');
+							mediaTypes.forEach(mt => {
+								const mtObj = content[mt] || {};
+								lines.push(`        - media_type: ${mt}`);
+								const schema = mtObj.schema || {};
+								if (schema.$ref) {
+									const rn = refName(schema.$ref);
+									if (rn) {
+										lines.push(`          schema_ref: ${rn}`);
+										usedSchemaNames.add(rn);
+									}
+								} else if (Object.keys(schema).length) {
+									lines.push('          schema_inline: true');
+								}
+							});
+						}
+					}
+					const responses = op.responses || {};
+					const resCodes = Object.keys(responses).sort();
+					if (resCodes.length) {
+						lines.push('    responses:');
+						resCodes.forEach(code => {
+							const r = responses[code] || {};
+							lines.push('      -');
+							lines.push(`        status: ${code}`);
+							if (r.description) lines.push(`        description: ${String(r.description).replace(/\s+/g, ' ')}`);
+							const content = r.content || {};
+							const mediaTypes = Object.keys(content);
+							if (mediaTypes.length) {
+								lines.push('        content:');
+								mediaTypes.forEach(mt => {
+									const mtObj = content[mt] || {};
+									const schema = mtObj.schema || {};
+									lines.push(`          - media_type: ${mt}`);
+									if (schema.$ref) {
+										const rn = refName(schema.$ref);
+										if (rn) {
+											lines.push(`            schema_ref: ${rn}`);
+											usedSchemaNames.add(rn);
+										}
+									} else if (Object.keys(schema).length) {
+										lines.push('            schema_inline: true');
+									}
+								});
+							}
+						});
+					}
+					lines.push('');
+				});
+			});
+			const schemaKeys = Object.keys(schemas).sort().filter(name => usedSchemaNames.has(name));
+			if (schemaKeys.length) {
+				lines.push('SCHEMAS');
+				schemaKeys.forEach(name => {
+					const s = schemas[name] || {};
+					ensureSchemaLoaded(name, s);
+					const type = s.type || (s.properties ? 'object' : 'unknown');
+					lines.push(`  - name: ${name}`);
+					lines.push(`    type: ${type}`);
+					if (s.description) lines.push(`    description: ${s.description.replace(/\s+/g, ' ')}`);
+					if (type === 'object' && s.properties) {
+						const requiredSet = new Set(Array.isArray(s.required) ? s.required : []);
+						lines.push('    properties:');
+						Object.keys(s.properties).sort().forEach(propName => {
+							const p = s.properties[propName] || {};
+							const pType = p.type || (p.$ref ? 'ref' : 'object');
+							lines.push('      -');
+							lines.push(`        name: ${propName}`);
+							lines.push(`        type: ${pType}`);
+							lines.push(`        required: ${requiredSet.has(propName)}`);
+							if (p.description) lines.push(`        description: ${p.description.replace(/\s+/g, ' ')}`);
+							if (p.enum) lines.push(`        enum_values: ${p.enum.join(', ')}`);
+							if (p.$ref) {
+								const rn = refName(p.$ref);
+								if (rn) {
+									lines.push(`        schema_ref: ${rn}`);
+									usedSchemaNames.add(rn);
+								}
+							}
+						});
+					}
+					if (s.type === 'array' && s.items) {
+						lines.push('    items:');
+						const it = s.items;
+						if (it.$ref) {
+							const rn = refName(it.$ref);
+							if (rn) {
+								lines.push(`      schema_ref: ${rn}`);
+								usedSchemaNames.add(rn);
+							}
+						} else {
+							lines.push(`      type: ${it.type || 'object'}`);
+						}
+					}
+					lines.push('');
+				});
+			}
+			return lines.join('\n').trim() + '\n';
+		}
+		async function handleFile(file) {
+			resetUI();
+			if (!file) return;
+			fileStatus.textContent = `Loading: ${file.name}`;
+			summaryStatus.textContent = 'Parsing…';
+			const reader = new FileReader();
+			reader.onload = () => {
+				try {
+					const text = reader.result;
+					let spec;
+					const trimmed = String(text).trim();
+					const looksJson = trimmed.startsWith('{') || trimmed.startsWith('[');
+					if (looksJson) {
+						spec = JSON.parse(trimmed);
+					} else {
+						spec = jsyaml.load(trimmed);
+					}
+					if (!spec || typeof spec !== 'object') {
+						throw new Error('Parsed spec is not an object');
+					}
+					const summary = shortSummary(spec);
+					parsedSummaryEl.textContent = summary || '(No basic metadata found)';
+					summaryStatus.textContent = 'Parsed successfully';
+					fileStatus.textContent = `Loaded: ${file.name}`;
+					const llmText = buildLLMDescription(spec);
+					llmOutputEl.textContent = llmText;
+					copyButton.disabled = !llmText;
+					tokenEstimate.textContent = humanTokenEstimate(llmText);
+				} catch (err) {
+					console.error(err);
+					summaryStatus.textContent = 'Failed to parse file';
+					parsedSummaryEl.textContent = String(err.message || err);
+					fileStatus.textContent = 'Error while parsing';
+					copyButton.disabled = true;
+					llmOutputEl.textContent = '';
+					tokenEstimate.textContent = '';
+				}
+			};
+			reader.onerror = () => {
+				summaryStatus.textContent = 'File read error';
+				fileStatus.textContent = 'Could not read file';
+			};
+			reader.readAsText(file);
+		}
+		fileInput.addEventListener('change', (e) => {
+			const file = e.target.files && e.target.files[0];
+			if (file) handleFile(file);
+		});
+		// Drag & drop support on the label area
+		const dropZone = document.querySelector('label[for="fileInput"]');
+		if (dropZone) {
+			['dragenter', 'dragover'].forEach(evt => {
+				dropZone.addEventListener(evt, e => {
+					e.preventDefault();
+					e.stopPropagation();
+					dropZone.classList.add('border-emerald-500');
+				});
+			});
+			['dragleave', 'drop'].forEach(evt => {
+				dropZone.addEventListener(evt, e => {
+					e.preventDefault();
+					e.stopPropagation();
+					dropZone.classList.remove('border-emerald-500');
+				});
+			});
+			dropZone.addEventListener('drop', e => {
+				const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+				if (file) handleFile(file);
+			});
+		}
+		copyButton.addEventListener('click', async () => {
+			const text = llmOutputEl.textContent || '';
+			if (!text) return;
+			try {
+				await navigator.clipboard.writeText(text);
+				const original = copyButton.textContent;
+				copyButton.textContent = 'Copied!';
+				copyButton.classList.add('border-emerald-500', 'text-emerald-100');
+				setTimeout(() => {
+					copyButton.textContent = 'Copy';
+					copyButton.classList.remove('border-emerald-500', 'text-emerald-100');
+				}, 1200);
+			} catch (err) {
+				console.error('Clipboard error', err);
+			}
+		});
+	</script>
+</body>
+
+</html>
