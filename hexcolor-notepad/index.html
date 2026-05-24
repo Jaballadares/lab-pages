@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notepad</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        void: '#0a0909',
+                        text: '#f4f4f5',
+                        accent: '#79C0FF',
+                    },
+                    fontFamily: {
+                        mono: ['"IBM Plex Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* ——— Scrollbar ——— */
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: #252525; }
+
+        /* ——— The scrollable editor viewport ——— */
+        .editor-viewport {
+            position: relative;
+            overflow-y: auto;
+            overflow-x: hidden;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Both layers sit on top of each other inside the viewport */
+        .editor-layer {
+            grid-area: 1 / 1;
+            font-family: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, Monaco, 'Consolas', monospace;
+            font-size: 14px;
+            line-height: 1.8;
+            padding: 80px 48px;
+            margin: 0;
+            border: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            box-sizing: border-box;
+            tab-size: 4;
+            background: transparent;
+        }
+
+        /* The textarea scrolls naturally — it IS the scroll source */
+        .editor-input {
+            z-index: 2;
+            color: transparent;
+            caret-color: #79C0FF;
+            resize: none;
+            outline: none;
+            overflow: auto;       /* native scrolling */
+            min-height: 100vh;
+        }
+
+        .editor-input::placeholder {
+            color: #333333;
+        }
+
+        @supports (caret-shape: block) {
+            .editor-input { caret-shape: block; }
+        }
+
+        /* The backdrop is a passive visual mirror */
+        .editor-backdrop {
+            z-index: 1;
+            pointer-events: none;
+            overflow: hidden;     /* never scrolls on its own */
+            color: #f4f4f5;
+            min-height: 100vh;
+        }
+
+        /* ——— Color badges ——— */
+        .color-badge {
+            padding: 1px 6px;
+            margin: 0 2px;
+            border-radius: 4px;
+            font-weight: 600;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.35);
+            border: 1px solid rgba(255,255,255,0.12);
+            display: inline-block;
+            line-height: 1.2;
+            text-transform: uppercase;
+        }
+
+        /* Subtler badge alternative (uncomment to try):
+        .color-badge {
+            padding: 0 4px;
+            margin: 0 1px;
+            border-radius: 3px;
+            font-weight: 500;
+            font-size: 0.92em;
+            box-shadow: none;
+            border: 1px solid rgba(255,255,255,0.08);
+            display: inline;
+            line-height: 1.3;
+            text-transform: lowercase;
+            letter-spacing: 0.02em;
+        }
+        */
+    </style>
+</head>
+<body class="bg-void text-text min-h-screen font-mono flex flex-col antialiased selection:bg-accent/20 selection:text-white overflow-hidden">
+
+    <!-- Centered scrollable editor -->
+    <main class="flex-1 editor-viewport flex justify-center">
+        <div class="w-full max-w-xl relative bg-[#0e0d0d] border-t border-white/[0.04] shadow-[0_0_80px_rgba(0,0,0,0.3)]" style="display: grid; grid-template-columns: 1fr; min-height: 100vh;">
+            <!-- Visual layer (behind) -->
+            <div id="backdrop" class="editor-layer editor-backdrop"></div>
+            <!-- Input layer (front, scrolls) -->
+            <textarea
+                id="editor"
+                class="editor-layer editor-input"
+                spellcheck="false"
+                placeholder="# Paste config containing colors here... (e.g. #0D1117)"></textarea>
+        </div>
+    </main>
+
+    <!-- Header (hover to reveal) -->
+    <div class="fixed top-6 right-8 z-30 opacity-0 hover:opacity-100 focus-within:opacity-100 transition-opacity duration-300 flex items-center gap-4 text-xs">
+        <button onclick="clearEditor()" class="text-neutral-500 hover:text-accent transition-colors flex items-center gap-1.5 cursor-pointer">
+            <i class="ph ph-trash"></i> Clear
+        </button>
+    </div>
+
+    <!-- Palette footer -->
+    <footer id="paletteFooter" class="fixed bottom-0 left-0 right-0 z-10 bg-[#0d0c0c]/90 backdrop-blur-md border-t border-white/5 py-4 px-8 transform translate-y-full transition-transform duration-300 ease-out flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div class="flex flex-wrap items-center gap-3">
+            <span class="text-xs text-neutral-400 font-semibold uppercase tracking-wider select-none">Palette:</span>
+            <div id="paletteRow" class="flex flex-wrap items-center gap-2"></div>
+        </div>
+        <div class="flex items-center gap-3 text-xs">
+            <span id="paletteCount" class="text-neutral-500 mr-2">0 colors</span>
+            <button onclick="copyExtractedList()" class="bg-white/5 hover:bg-white/10 border border-white/10 text-neutral-200 hover:text-white px-3 py-1.5 rounded transition-all flex items-center gap-1.5 cursor-pointer">
+                <i class="ph ph-copy"></i> Copy Color List
+            </button>
+        </div>
+    </footer>
+
+    <!-- Toast -->
+    <div id="toast" class="fixed bottom-8 right-8 z-50 transform translate-y-20 opacity-0 pointer-events-none transition-all duration-300 bg-[#1a2332] text-accent text-xs px-4 py-3 rounded shadow-xl flex items-center gap-2 border border-accent/30">
+        <i class="ph-bold ph-check"></i>
+        <span id="toastText">Copied value!</span>
+    </div>
+
+    <script>
+        let detectedColors = [];
+
+        const editor    = document.getElementById('editor');
+        const backdrop  = document.getElementById('backdrop');
+        const footer    = document.getElementById('paletteFooter');
+        const paletteRow = document.getElementById('paletteRow');
+        const countBadge = document.getElementById('paletteCount');
+
+        function escapeHTML(str) {
+            return str
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function getLuminanceColor(hex) {
+            let c = hex.substring(1);
+            if (c.length === 3 || c.length === 4) {
+                c = c[0] + c[0] + c[1] + c[1] + c[2] + c[2];
+            } else if (c.length === 8) {
+                c = c.substring(0, 6);
+            }
+            const r = parseInt(c.slice(0, 2), 16) || 0;
+            const g = parseInt(c.slice(2, 4), 16) || 0;
+            const b = parseInt(c.slice(4, 6), 16) || 0;
+            const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+            return luminance > 0.45 ? '#000000' : '#ffffff';
+        }
+
+        function handleEditorInput() {
+            const rawText = editor.value;
+            const hexRegex = /#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/g;
+            const matches = rawText.match(hexRegex) || [];
+
+            detectedColors = [...new Set(matches.map(c => c.toLowerCase()))];
+
+            const escaped = escapeHTML(rawText);
+            let highlighted = escaped.replace(hexRegex, (match) => {
+                const textColor = getLuminanceColor(match);
+                return `<span class="color-badge" style="background-color: ${match}; color: ${textColor};">${match}</span>`;
+            });
+
+            if (rawText.endsWith('\n')) {
+                highlighted += '\n ';
+            }
+
+            // Syntax highlighting
+            const lines = highlighted.split('\n');
+            const processedLines = lines.map(line => {
+                const trimmed = line.trim();
+                if (trimmed.startsWith('#') || trimmed.startsWith('!')) {
+                    return `<span class="text-emerald-500/60 italic">${line}</span>`;
+                }
+                return line.replace(/[┌┬┐├┼┤└┴┘│─]+/g, '<span class="text-neutral-500 font-bold">$&</span>');
+            });
+            highlighted = processedLines.join('\n');
+
+            backdrop.innerHTML = highlighted;
+            updatePaletteMetrics();
+        }
+
+        /**
+         * KEY FIX: Sync backdrop scroll to match the textarea's scroll position.
+         * The textarea is the scroll source. The backdrop is a passive visual mirror.
+         */
+        function syncScroll() {
+            backdrop.scrollTop = editor.scrollTop;
+            backdrop.scrollLeft = editor.scrollLeft;
+        }
+
+        function updatePaletteMetrics() {
+            if (detectedColors.length === 0) {
+                footer.classList.add('translate-y-full');
+                return;
+            }
+            footer.classList.remove('translate-y-full');
+            countBadge.innerText = `${detectedColors.length} unique colors detected`;
+
+            let html = '';
+            detectedColors.forEach((color) => {
+                html += `
+                    <button onclick="copyText('${color}')" title="Copy ${color}"
+                        style="background-color: ${color};"
+                        class="w-6 h-6 rounded-full border border-white/20 shadow-md transform transition-all hover:scale-110 active:scale-90 focus:outline-none cursor-pointer">
+                    </button>`;
+            });
+            paletteRow.innerHTML = html;
+        }
+
+        function copyText(text) {
+            const temp = document.createElement('textarea');
+            temp.value = text;
+            document.body.appendChild(temp);
+            temp.select();
+            try {
+                document.execCommand('copy');
+                triggerToast(`Copied ${text.toUpperCase()}!`);
+            } catch (err) {
+                triggerToast("Copy failed.");
+            }
+            document.body.removeChild(temp);
+        }
+
+        function copyExtractedList() {
+            if (detectedColors.length === 0) { triggerToast("No colors detected."); return; }
+            copyText(detectedColors.join('\n'));
+        }
+
+        function clearEditor() {
+            editor.value = '';
+            handleEditorInput();
+            editor.focus();
+            triggerToast("Cleared");
+        }
+
+        function triggerToast(message) {
+            const toast = document.getElementById('toast');
+            const toastText = document.getElementById('toastText');
+            toastText.innerText = message;
+            toast.classList.remove('opacity-0', 'translate-y-20', 'pointer-events-none');
+            toast.classList.add('opacity-100', 'translate-y-0');
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-20', 'pointer-events-none');
+                toast.classList.remove('opacity-100', 'translate-y-0');
+            }, 2000);
+        }
+
+        function loadInjectedHashText() {
+            const params = new URLSearchParams(window.location.hash.slice(1));
+            const injectedText = params.get('text');
+            if (!injectedText) return;
+
+            editor.value = injectedText;
+
+            // Keep the payload out of the address bar after ingesting it.
+            history.replaceState(null, document.title, window.location.pathname + window.location.search);
+        }
+
+        window.onload = function () {
+            loadInjectedHashText();
+
+            editor.addEventListener('input', handleEditorInput);
+
+            // Sync scroll: backdrop follows textarea
+            editor.addEventListener('scroll', syncScroll);
+
+            // Tab support
+            editor.addEventListener('keydown', function (e) {
+                if (e.key === 'Tab') {
+                    e.preventDefault();
+                    const start = this.selectionStart;
+                    const end = this.selectionEnd;
+                    this.value = this.value.substring(0, start) + '\t' + this.value.substring(end);
+                    this.selectionStart = this.selectionEnd = start + 1;
+                    handleEditorInput();
+                }
+            });
+
+            handleEditorInput();
+            editor.focus();
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lab Pages</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #0a0909;
+      color: #f4f4f5;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    main { width: min(680px, calc(100vw - 48px)); }
+    h1 { margin: 0 0 12px; font-size: 28px; }
+    p { color: #a1a1aa; line-height: 1.6; }
+    a {
+      display: block;
+      margin-top: 18px;
+      padding: 16px 18px;
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 12px;
+      color: #79C0FF;
+      background: #0e0d0d;
+      text-decoration: none;
+    }
+    a:hover { border-color: rgba(121,192,255,.35); background: #111827; }
+    span { display: block; margin-top: 6px; color: #71717a; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Lab Pages</h1>
+    <p>Small browser-based utilities and experiments.</p>
+    <a href="./hexcolor-notepad/">
+      Hex Color Notepad
+      <span>Paste config/theme text and preview detected hex colors.</span>
+    </a>
+  </main>
+</body>
+</html>
